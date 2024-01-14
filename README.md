@@ -1,2 +1,2 @@
--nella cartella del progetto bisogna mettere una cartella chiamata "foto" per salvare le foto che poi verranno usate come database delle gesture del PIS
--crea un .venv dal terminale e scarica: pip install opencv-python & pip install mediapipe
+-Dentro la cartella del progetto bisogna creare una cartella chiamata "foto" per salvare le foto che poi verranno usate come database delle gesture del PIS
+-Crea un .venv e dopo dal terminale scarica: pip install opencv-python & pip install mediapipe
