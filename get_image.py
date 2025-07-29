@@ -6,6 +6,12 @@ def get_image():
     Class = 'iloveu'
     Path('DATASET/'+Class).mkdir(parents=True, exist_ok=True)
     cap = cv.VideoCapture(0)
+    if not cap.isOpened():
+        print("❌ Errore: Webcam non accessibile.")
+        return
+    else:
+        print("✅ Webcam trovata.")
+    cap.release()
     i = 0
     while True:
        
