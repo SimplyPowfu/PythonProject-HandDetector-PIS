@@ -2,9 +2,6 @@ import cv2
 import mediapipe as mp
 from pathlib import Path
 
-mp_drawing = mp.solutions.drawing_utils
-mp_hands = mp.solutions.hands
-cam = cv2.VideoCapture(0)
 class Mano():
 	def __init__(self, tipoMano):               #Inizializza la classe
 		self.fingers = [0] * 5
@@ -14,6 +11,10 @@ class Mano():
 		self.fingers[posFinger]=alzato
 	def setVisualizato(self, visualizzata: bool):
 		self.visualizzata = visualizzata
+
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+cam = cv2.VideoCapture(0)
 manoDestra = Mano("Right")
 manoSinistra = Mano("Left")
 

@@ -1,34 +1,83 @@
 import cv2
 import mediapipe as mp
+import numpy as np
+
+class Mano:
+	def __init__(self, tipoMano):
+		self.tipoMano = tipoMano
+		self.visualizzata = False
+		self.green_mask = None
+	
+	def setVisualizzata(self, val: bool):
+		self.visualizzata = val
+
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
-contatore = 0
 cam = cv2.VideoCapture(0)
+manoDestra = Mano("Right")
+manoSinistra = Mano("Left")
+
+padding = 7 
 
 with mp_hands.Hands(
 		min_detection_confidence=0.5,
 		min_tracking_confidence=0.5) as hands:
 	while True:
 		retn, frame = cam.read()
-		frame = cv2.cvtColor(cv2.flip(frame, 1), cv2.COLOR_BGR2RGB)
+		if not retn:
+			break
+		frame = cv2.flip(frame, 1)
+		frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+		results = hands.process(frame_rgb)
+
+		frame_draw = frame.copy()
+		manoDestra.setVisualizzata(False)
+		manoSinistra.setVisualizzata(False)
+		manoDestra.green_mask = None
+		manoSinistra.green_mask = None
+
+		h, w, _ = frame.shape
+
+		if results.multi_hand_landmarks and results.multi_handedness:
+			for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
+				label = handedness.classification[0].label
+				xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
+				ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
+				x_min = max(min(xs) - padding, 0)
+				x_max = min(max(xs) + padding, w)
+				y_min = max(min(ys) - padding, 0)
+				y_max = min(max(ys) + padding, h)
+
+				mano_img = np.full((y_max - y_min, x_max - x_min, 3), (0, 255, 0), dtype=np.uint8)
+				landmarks_xy = [(int(lm.x * w) - x_min, int(lm.y * h) - y_min) for lm in hand_landmarks.landmark]
+
+				for connection in mp_hands.HAND_CONNECTIONS:
+					start_idx, end_idx = connection
+					start_point = landmarks_xy[start_idx]
+					end_point = landmarks_xy[end_idx]
+					cv2.line(mano_img, start_point, end_point, (255, 0, 0), 2)  # linee blu
+				for (x, y) in landmarks_xy:
+					cv2.circle(mano_img, (x, y), 5, (0, 0, 255), -1)  # punti rossi
+				if label == "Right":
+					manoDestra.setVisualizzata(True)
+					manoDestra.green_mask = mano_img
+				elif label == "Left":
+					manoSinistra.setVisualizzata(True)
+					manoSinistra.green_mask = mano_img
+				mp_drawing.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+		cv2.imshow('camera', frame_draw)
+		if manoDestra.visualizzata and manoDestra.green_mask is not None:
+			cv2.imshow('Mano Destra', manoDestra.green_mask)
+		#else:
+			#cv2.destroyWindow('Mano Destra')
+		if manoSinistra.visualizzata and manoSinistra.green_mask is not None:
+			cv2.imshow('Mano Sinistra', manoSinistra.green_mask)
+		#else:
+			#cv2.destroyWindow('Mano Sinistra')
 		tasto = cv2.waitKey(1)
-		frame.flags.writeable = False
-		results = hands.process(frame)
-		
-		# Draw the hand annotations on the image.
-		frame.flags.writeable = True
-		frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-		if results.multi_hand_landmarks:
-			for hand_landmarks in results.multi_hand_landmarks:
-				mp_drawing.draw_landmarks(
-						frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-		cv2.imshow('camera', frame)
 		if tasto == ord("q"):
-				cv2.destroyAllWindows()                 
-				break         
-		elif tasto == ord("c"):
-				cv2.imwrite(f"./foto/{contatore}.jpeg", frame)   
-				contatore += 1 
-		if contatore == 20:
-				break    
+			break
+
 cam.release()
+cv2.destroyAllWindows()
