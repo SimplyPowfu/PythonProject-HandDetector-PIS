@@ -1,23 +1,27 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-#source env/bin/activate
+
 class Mano:
 	def __init__(self, tipoMano):
 		self.tipoMano = tipoMano
 		self.visualizzata = False
 		self.green_mask = None
-	
+
 	def setVisualizzata(self, val: bool) -> None:
 		self.visualizzata = val
 
+# Inizializzazione MediaPipe per Track mani
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
+
 cam = cv2.VideoCapture(0)
 manoDestra = Mano("Right")
 manoSinistra = Mano("Left")
 
 padding = 7
+
+layer_width, layer_height = 300, 300
 
 with mp_hands.Hands(
 		min_detection_confidence=0.5,
@@ -32,6 +36,7 @@ with mp_hands.Hands(
 		results = hands.process(frame_rgb)
 
 		frame_draw = frame.copy()
+
 		manoDestra.setVisualizzata(False)
 		manoSinistra.setVisualizzata(False)
 		manoDestra.green_mask = None
@@ -42,6 +47,7 @@ with mp_hands.Hands(
 		if results.multi_hand_landmarks and results.multi_handedness:
 			for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
 				label = handedness.classification[0].label
+
 				xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
 				ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
 				x_min = max(min(xs) - padding, 0)
@@ -49,22 +55,32 @@ with mp_hands.Hands(
 				y_min = max(min(ys) - padding, 0)
 				y_max = min(max(ys) + padding, h)
 
+				# Crea ritaglio della mano con sfondo verde
 				mano_img = np.full((y_max - y_min, x_max - x_min, 3), (0, 255, 0), dtype=np.uint8)
 				landmarks_xy = [(int(lm.x * w) - x_min, int(lm.y * h) - y_min) for lm in hand_landmarks.landmark]
 
+				# Disegna connessioni blu
 				for connection in mp_hands.HAND_CONNECTIONS:
 					start_idx, end_idx = connection
 					start_point = landmarks_xy[start_idx]
 					end_point = landmarks_xy[end_idx]
-					cv2.line(mano_img, start_point, end_point, (255, 0, 0), 2)  # linee blu
+					cv2.line(mano_img, start_point, end_point, (255, 0, 0), 2)
+				
+				# Disegna punti rossi
 				for (x, y) in landmarks_xy:
-					cv2.circle(mano_img, (x, y), 5, (0, 0, 255), -1)  # punti rossi
+					cv2.circle(mano_img, (x, y), 5, (0, 0, 255), -1)
+
+				# Resize del layer verde sempre a dimensione fissa
+				mano_img_resized = cv2.resize(mano_img, (layer_width, layer_height), interpolation=cv2.INTER_LINEAR)
+
+				# Assegna alla mano corretta
 				if label == "Right":
 					manoDestra.setVisualizzata(True)
-					manoDestra.green_mask = mano_img
+					manoDestra.green_mask = mano_img_resized
 				elif label == "Left":
 					manoSinistra.setVisualizzata(True)
-					manoSinistra.green_mask = mano_img
+					manoSinistra.green_mask = mano_img_resized
+
 				mp_drawing.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
 		cv2.imshow('camera', frame_draw)
