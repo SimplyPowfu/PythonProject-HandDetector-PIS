@@ -60,38 +60,29 @@ def recognize_gestures(dataset_folder="DATASET"):
                 xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
                 ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
 
-                x_min = max(min(xs) - padding, 0)
-                x_max = min(max(xs) + padding, w)
-                y_min = max(min(ys) - padding, 0)
-                y_max = min(max(ys) + padding, h)
+                x_min = max(min(xs), 0)
+                x_max = min(max(xs), w)
+                y_min = max(min(ys), 0)
+                y_max = min(max(ys), h)
 
-                # Crea layer verde (solo per calcolo)
-                mano_img = np.full((y_max - y_min, x_max - x_min, 3), (0, 255, 0), dtype=np.uint8)
-                landmarks_xy = [(int(lm.x * w) - x_min, int(lm.y * h) - y_min) for lm in hand_landmarks.landmark]
+                if x_max - x_min == 0 or y_max - y_min == 0:
+                    continue  # evita divisioni per zero
 
-                # Centro della mano
-                cx = (x_max - x_min) / 2
-                cy = (y_max - y_min) / 2
+                # Ritaglia la mano dal frame
+                mano_cropped = frame[y_min:y_max, x_min:x_max]
 
-                # Landmark centrati
-                landmarks_centered = [(x - cx, y - cy) for x, y in landmarks_xy]
+                # Ridimensiona a 300x300
+                layer_img = cv2.resize(mano_cropped, (layer_width, layer_height))
 
-                # Disegna connessioni blu
-                for start_idx, end_idx in mp_hands.HAND_CONNECTIONS:
-                    start_point = landmarks_xy[start_idx]
-                    end_point = landmarks_xy[end_idx]
-                    cv2.line(mano_img, start_point, end_point, (255, 0, 0), 2)
-                # Disegna punti rossi
-                for (x, y) in landmarks_xy:
-                    cv2.circle(mano_img, (x, y), 5, (0, 0, 255), -1)
+                # Calcola landmark sul layer
+                landmarks_layer = []
+                for lm in hand_landmarks.landmark:
+                    x_pixel = int((lm.x * w - x_min) * (layer_width / (x_max - x_min)))
+                    y_pixel = int((lm.y * h - y_min) * (layer_height / (y_max - y_min)))
+                    landmarks_layer.append((x_pixel, y_pixel))
 
-                # Resize layer a 300x300
-                layer_img = cv2.resize(mano_img, (layer_width, layer_height), interpolation=cv2.INTER_LINEAR)
-
-                # Normalizza landmark centrati
-                landmarks_normalized = [((x + (layer_width / 2)) / layer_width,
-                                         (y + (layer_height / 2)) / layer_height)
-                                        for x, y in landmarks_centered]
+                # Normalizza tra 0 e 1 rispetto al layer
+                landmarks_normalized = [(x / layer_width, y / layer_height) for x, y in landmarks_layer]
 
                 # Confronto landmark
                 for label, landmark_sets in gestures.items():

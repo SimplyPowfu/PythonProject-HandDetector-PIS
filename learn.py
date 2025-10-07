@@ -29,97 +29,103 @@ def add_gesture():
     get_hand_layer_and_landmarks(gesture_name)
 
 def get_hand_layer_and_landmarks(gesture_name):
-	cap = cv2.VideoCapture(0)
-	if not cap.isOpened():
-		print("❌ Errore: Webcam non accessibile.")
-		return
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("❌ Errore: Webcam non accessibile.")
+        return
 
-	mp_hands = mp.solutions.hands
-	mp_drawing = mp.solutions.drawing_utils
+    mp_hands = mp.solutions.hands
+    mp_drawing = mp.solutions.drawing_utils
 
-	padding = 7
-	layer_width, layer_height = 300, 300
-	i = 0
+    layer_width, layer_height = 300, 300
+    i = 0
+    padding = 7  # piccolo margine intorno alla mano
 
-	with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
-		while True:
-			ret, frame = cap.read()
-			if not ret:
-				break
-			frame = cv2.flip(frame, 1)
-			frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-			results = hands.process(frame_rgb)
+    with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = cv2.flip(frame, 1)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = hands.process(frame_rgb)
 
-			frame_draw = frame.copy()
-			layer_img = None
-			landmarks_normalized = None
+            frame_draw = frame.copy()
+            layer_img = None
+            landmarks_normalized = None
 
-			h, w, _ = frame.shape
+            h, w, _ = frame.shape
 
-			# Se rileva almeno una mano, prende solo la prima
-			if results.multi_hand_landmarks:
-				hand_landmarks = results.multi_hand_landmarks[0]
+            if results.multi_hand_landmarks:
+                hand_landmarks = results.multi_hand_landmarks[0]
 
-				xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
-				ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
+                xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
+                ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
 
-				# Bounding box
-				x_min = max(min(xs) - padding, 0)
-				x_max = min(max(xs) + padding, w)
-				y_min = max(min(ys) - padding, 0)
-				y_max = min(max(ys) + padding, h)
+                # Bounding box mano con padding
+                x_min = max(min(xs) - padding, 0)
+                x_max = min(max(xs) + padding, w)
+                y_min = max(min(ys) - padding, 0)
+                y_max = min(max(ys) + padding, h)
 
-				# Layer verde
-				mano_img = np.full((y_max - y_min, x_max - x_min, 3), (0, 255, 0), dtype=np.uint8)
-				landmarks_xy = [(int(lm.x * w) - x_min, int(lm.y * h) - y_min) for lm in hand_landmarks.landmark]
+                # Ritaglia la mano dal frame
+                mano_cropped = frame[y_min:y_max, x_min:x_max]
 
-				# Centro della mano
-				cx = (x_max - x_min) / 2
-				cy = (y_max - y_min) / 2
+                if mano_cropped.size == 0:
+                    continue  # evita errori se la mano è fuori frame
 
-				# Trasla i punti rispetto al centro del layer
-				landmarks_centered = [(x - cx, y - cy) for x, y in landmarks_xy]
+                # Ridimensiona la mano a 300x300
+                layer_img = cv2.resize(mano_cropped, (layer_width, layer_height))
 
-				# Disegna connessioni blu
-				for connection in mp_hands.HAND_CONNECTIONS:
-					start_idx, end_idx = connection
-					start_point = landmarks_xy[start_idx]
-					end_point = landmarks_xy[end_idx]
-					cv2.line(mano_img, start_point, end_point, (255, 0, 0), 2)
+                # Crea il layer verde per estetica
+                layer_img_green = np.full((layer_height, layer_width, 3), (0, 255, 0), dtype=np.uint8)
 
-				# Disegna punti rossi
-				for (x, y) in landmarks_xy:
-					cv2.circle(mano_img, (x, y), 5, (0, 0, 255), -1)
+                # Landmark sul layer 300x300
+                landmarks_layer = []
+                for lm in hand_landmarks.landmark:
+                    x_pixel = int((lm.x * w - x_min) * (layer_width / (x_max - x_min)))
+                    y_pixel = int((lm.y * h - y_min) * (layer_height / (y_max - y_min)))
+                    landmarks_layer.append((x_pixel, y_pixel))
 
-				# Resize layer a 300x300
-				layer_img = cv2.resize(mano_img, (layer_width, layer_height), interpolation=cv2.INTER_LINEAR)
+                # Normalizza tra 0 e 1 rispetto al layer 300x300
+                landmarks_normalized = [(x / layer_width, y / layer_height) for x, y in landmarks_layer]
 
-				# Normalizza punti centrati rispetto a 300x300
-				landmarks_normalized = [((x + (layer_width/2)) / layer_width, (y + (layer_height/2)) / layer_height)
-										for x, y in landmarks_centered]
+                # Disegna connessioni blu
+                for start_idx, end_idx in mp_hands.HAND_CONNECTIONS:
+                    start_point = landmarks_layer[start_idx]
+                    end_point = landmarks_layer[end_idx]
+                    cv2.line(layer_img_green, start_point, end_point, (255, 0, 0), 2)
 
-				mp_drawing.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                # Disegna punti rossi
+                for (x, y) in landmarks_layer:
+                    cv2.circle(layer_img_green, (x, y), 5, (0, 0, 255), -1)
 
-			# Mostra finestre
-			cv2.imshow("camera", frame_draw)
-			if layer_img is not None:
-				cv2.imshow("Hand Layer", layer_img)
+                # Mostra landmarks sul frame principale (opzionale)
+                mp_drawing.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-			# Salva landmark in JSON premendo "c"
-			key = cv2.waitKey(1) & 0xFF
-			if key == ord("c") and landmarks_normalized is not None:
-				Path(f"DATASET/{gesture_name}").mkdir(parents=True, exist_ok=True)
-				i += 1
-				file_path = f"DATASET/{gesture_name}/{i}.json"
-				with open(file_path, "w") as f:
-					json.dump(landmarks_normalized, f)
-				print(f"✅ Salvati landmark mano in {file_path}")
+                # Aggiorna layer_img con quello verde disegnato sopra
+                layer_img = layer_img_green
 
-			elif key == ord("q") or cv2.getWindowProperty("camera", cv2.WND_PROP_VISIBLE) < 1:
-				break
+            # Mostra finestre
+            cv2.imshow("camera", frame_draw)
+            if layer_img is not None:
+                cv2.imshow("Hand Layer", layer_img)
 
-	cap.release()
-	cv2.destroyAllWindows()
+            # Salva landmark premendo "c"
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("c") and landmarks_normalized is not None:
+                Path(f"DATASET/{gesture_name}").mkdir(parents=True, exist_ok=True)
+                i += 1
+                file_path = f"DATASET/{gesture_name}/{i}.json"
+                with open(file_path, "w") as f:
+                    json.dump(landmarks_normalized, f)
+                print(f"✅ Salvati landmark mano in {file_path}")
+
+            elif key == ord("q") or cv2.getWindowProperty("camera", cv2.WND_PROP_VISIBLE) < 1:
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     while True:
