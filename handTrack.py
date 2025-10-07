@@ -1,14 +1,14 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-
+#source env/bin/activate
 class Mano:
 	def __init__(self, tipoMano):
 		self.tipoMano = tipoMano
 		self.visualizzata = False
 		self.green_mask = None
 	
-	def setVisualizzata(self, val: bool):
+	def setVisualizzata(self, val: bool) -> None:
 		self.visualizzata = val
 
 mp_drawing = mp.solutions.drawing_utils
@@ -17,11 +17,12 @@ cam = cv2.VideoCapture(0)
 manoDestra = Mano("Right")
 manoSinistra = Mano("Left")
 
-padding = 7 
+padding = 7
 
 with mp_hands.Hands(
 		min_detection_confidence=0.5,
-		min_tracking_confidence=0.5) as hands:
+		min_tracking_confidence=0.5
+) as hands:
 	while True:
 		retn, frame = cam.read()
 		if not retn:
@@ -69,14 +70,10 @@ with mp_hands.Hands(
 		cv2.imshow('camera', frame_draw)
 		if manoDestra.visualizzata and manoDestra.green_mask is not None:
 			cv2.imshow('Mano Destra', manoDestra.green_mask)
-		#else:
-			#cv2.destroyWindow('Mano Destra')
 		if manoSinistra.visualizzata and manoSinistra.green_mask is not None:
 			cv2.imshow('Mano Sinistra', manoSinistra.green_mask)
-		#else:
-			#cv2.destroyWindow('Mano Sinistra')
-		tasto = cv2.waitKey(1)
-		if tasto == ord("q"):
+		tasto = cv2.waitKey(1) & 0xFF
+		if tasto == ord("q") or tasto == 27 or cv2.getWindowProperty("camera", cv2.WND_PROP_VISIBLE) < 1:
 			break
 
 cam.release()
