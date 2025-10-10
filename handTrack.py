@@ -23,7 +23,7 @@ padding = 7
 layer_width, layer_height = 300, 300
 
 with mp_hands.Hands(
-		min_detection_confidence=0.5,
+		min_detection_confidence=0.6,
 		min_tracking_confidence=0.5
 ) as hands:
 	while True:

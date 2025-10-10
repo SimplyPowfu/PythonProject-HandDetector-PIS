@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 import json
 
+# Caricamento dataset
 def load_gesture_landmarks(dataset_folder):
 	gestures = {}
 	for gesture_folder in Path(dataset_folder).glob("*"):
@@ -11,23 +12,30 @@ def load_gesture_landmarks(dataset_folder):
 		landmarks_list = []
 		for file in json_files:
 			with open(file, "r") as f:
-				landmarks = json.load(f)
-				landmarks_list.append(landmarks)
+				data = json.load(f)
+				# Ogni file contiene {"Right": [...], "Left": [...]} (una o entrambe)
+				landmarks_list.append(data)
 		if landmarks_list:
 			gestures[gesture_folder.name] = landmarks_list
 	return gestures
 
-def landmarks_match(layer_landmarks, gesture_landmarks_list, tolerance):
-	for gesture_landmarks in gesture_landmarks_list:
-		match = True
-		for (x1, y1), (x2, y2) in zip(layer_landmarks, gesture_landmarks):
-			if abs(x1 - x2) > tolerance or abs(y1 - y2) > tolerance:
-				match = False
-				break
-		if match:
-			return True
-	return False
+# Funzione per confronto dei landmarks
+def landmarks_match(live_landmarks, ref_landmarks, tolerance):
+	"""
+	live_landmarks e ref_landmarks sono liste [(x, y), ...] normalizzate [0,1].
+	Ritorna True se la distanza di ogni punto è sotto la tolleranza.
+	"""
+	if not live_landmarks or not ref_landmarks:
+		return False
+	if len(live_landmarks) != len(ref_landmarks):
+		return False
 
+	for (x1, y1), (x2, y2) in zip(live_landmarks, ref_landmarks):
+		if abs(x1 - x2) > tolerance or abs(y1 - y2) > tolerance:
+			return False
+	return True
+
+# Funzione principale di riconoscimento
 def recognize_gestures(dataset_folder="DATASET"):
 	cap = cv2.VideoCapture(0)
 	if not cap.isOpened():
@@ -39,8 +47,12 @@ def recognize_gestures(dataset_folder="DATASET"):
 	padding = 7
 
 	gestures = load_gesture_landmarks(dataset_folder)
+	print(f"✅ Dataset caricato: {len(gestures)} gesti trovati.")
 
-	with mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+	with mp_hands.Hands(
+		min_detection_confidence=0.6,
+		min_tracking_confidence=0.5
+	) as hands:
 		while True:
 			ret, frame = cap.read()
 			if not ret:
@@ -49,58 +61,78 @@ def recognize_gestures(dataset_folder="DATASET"):
 			frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 			results = hands.process(frame_rgb)
 
-			gesture_found = False
-			class_name = None
-
 			h, w, _ = frame.shape
+			frame_draw = frame.copy()
 
-			if results.multi_hand_landmarks:
-				hand_landmarks = results.multi_hand_landmarks[0]
+			# Dizionario con i landmark normalizzati live: {"Right": [...], "Left": [...]}
+			live_landmarks = {}
 
-				xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
-				ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
+			if results.multi_hand_landmarks and results.multi_handedness:
+				for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
+					label = handedness.classification[0].label  # "Right" o "Left"
 
-				x_min = max(min(xs), 0)
-				x_max = min(max(xs), w)
-				y_min = max(min(ys), 0)
-				y_max = min(max(ys), h)
+					xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
+					ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
 
-				if x_max - x_min == 0 or y_max - y_min == 0:
-					continue  # evita divisioni per zero
+					x_min = max(min(xs) - padding, 0)
+					x_max = min(max(xs) + padding, w)
+					y_min = max(min(ys) - padding, 0)
+					y_max = min(max(ys) + padding, h)
 
-				# Ritaglia la mano dal frame
-				mano_cropped = frame[y_min:y_max, x_min:x_max]
+					if x_max - x_min == 0 or y_max - y_min == 0:
+						continue
 
-				# Ridimensiona a 300x300
-				layer_img = cv2.resize(mano_cropped, (layer_width, layer_height))
+					# Conversione in coordinate layer 300x300
+					landmarks_layer = []
+					for lm in hand_landmarks.landmark:
+						x_pixel = (lm.x * w - x_min) * (layer_width / (x_max - x_min))
+						y_pixel = (lm.y * h - y_min) * (layer_height / (y_max - y_min))
+						landmarks_layer.append((x_pixel / layer_width, y_pixel / layer_height))
 
-				# Calcola landmark sul layer
-				landmarks_layer = []
-				for lm in hand_landmarks.landmark:
-					x_pixel = int((lm.x * w - x_min) * (layer_width / (x_max - x_min)))
-					y_pixel = int((lm.y * h - y_min) * (layer_height / (y_max - y_min)))
-					landmarks_layer.append((x_pixel, y_pixel))
+					live_landmarks[label] = landmarks_layer
+					mp.solutions.drawing_utils.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-				# Normalizza tra 0 e 1 rispetto al layer
-				landmarks_normalized = [(x / layer_width, y / layer_height) for x, y in landmarks_layer]
+			# Confronto con dataset
+			recognized_gesture = None
+			tolerance = 0.13  # più alto = più permissivo
 
-				# Confronto landmark
-				for label, landmark_sets in gestures.items():
-					if landmarks_match(landmarks_normalized, landmark_sets, tolerance=0.13):#aumentare il valore per aumentare il gap di errore
-						gesture_found = True
-						class_name = label
+			if live_landmarks:
+				for gesture_name, gesture_samples in gestures.items():
+					for ref in gesture_samples:
+						match_right = match_left = True
+
+						# Se nel file c’è la destra, confronta
+						if "Right" in ref:
+							if "Right" not in live_landmarks:
+								match_right = False
+							else:
+								match_right = landmarks_match(live_landmarks["Right"], ref["Right"], tolerance)
+
+						# Se nel file c’è la sinistra, confronta
+						if "Left" in ref:
+							if "Left" not in live_landmarks:
+								match_left = False
+							else:
+								match_left = landmarks_match(live_landmarks["Left"], ref["Left"], tolerance)
+
+						# Se entrambi (presenti o meno) combaciano
+						if match_right and match_left:
+							recognized_gesture = gesture_name
+							break
+
+					if recognized_gesture:
 						break
 
-			# Mostra solo la webcam con il testo del gesto
-			display_frame = frame.copy()
-			if gesture_found:
-				cv2.putText(display_frame, f"Gesto: {class_name}", (10, 30),
-							cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+			# Output video
+			if recognized_gesture:
+				text = f"Gesto: {recognized_gesture}"
+				color = (0, 255, 0)
 			else:
-				cv2.putText(display_frame, "Nessun gesto", (10, 30),
-							cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+				text = "Nessun gesto"
+				color = (0, 0, 255)
 
-			cv2.imshow("Camera", display_frame)
+			cv2.putText(frame_draw, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+			cv2.imshow("Camera", frame_draw)
 
 			if cv2.waitKey(1) & 0xFF == ord("q"):
 				break
