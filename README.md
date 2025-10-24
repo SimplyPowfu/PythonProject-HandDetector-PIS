@@ -1,7 +1,7 @@
 -Dentro la cartella del progetto bisogna creare una cartella chiamata "DATASET" per salvare le informazioni che poi verranno usate come database delle gesture del LIS, dentro la cartella andranno messe altre sotto cartelle che l'IA userà per riconoscere i gesti
 -Crea un .venv e dopo dal terminale scarica: pip install opencv-python & pip install mediapipe.
 P.S.
-esegui learn.py per caricare le foto del segno sul database cliccando c, per provare il riconoscimento numeri esegui handGesture.py e prova, sia con una mano che con due, a alzare e abbassare le dita per comporre i numeri, infine esegui recognize.py, per provare a riconoscere i precedenti segnali dati a learn.py
+esegui learn.py per caricare le foto del segno sul database cliccando c, una volta creato il tuo segno dovrai compilare il file binary_dataset.py per convertire la libreria in binario, per provare il riconoscimento numeri esegui handGesture.py e prova, sia con una mano che con due, a alzare e abbassare le dita per comporre i numeri, infine esegui recognize.py, per provare a riconoscere i precedenti segnali dati a learn.py
 il programma è in fase di sviluppo. Presenta bug della lettura della mano.
 
 

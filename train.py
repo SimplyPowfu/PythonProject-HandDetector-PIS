@@ -1,0 +1,1 @@
+#addestratore da JSON usando K-Nearest Neighbors (KNN) o Random Forest (libreria scikit-learn)
