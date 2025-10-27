@@ -1,40 +1,39 @@
 import cv2
 import mediapipe as mp
-import numpy as np  # --- NUOVO: Importa NumPy ---
+import numpy as np
 from pathlib import Path
-import pickle     # --- NUOVO: Sostituisce json ---
+import pickle
 import sys
 
-# --- NUOVO: Funzione di caricamento per file binario ---
 def load_compiled_gestures(file_path="compiled_gestures.dat"):
 	try:
-		with open(file_path, "rb") as f: # "rb" = Read Binary
+		with open(file_path, "rb") as f:
 			gestures = pickle.load(f)
 		return gestures
 	except FileNotFoundError:
 		print(f"❌ Errore: File dataset compilato '{file_path}' non trovato.")
 		print("➡️ Esegui prima 'python compile_dataset.py' per crearlo.")
-		sys.exit(1) # Esce dallo script
+		sys.exit(1)
 	except Exception as e:
 		print(f"❌ Errore durante il caricamento di '{file_path}': {e}")
 		sys.exit(1)
 
-# --- NUOVO: Funzione per il calcolo dell'errore (sostituisce landmarks_match) ---
+#Funzione per il calcolo dell'errore 
 def calcola_errore_mse(live_landmarks, ref_landmarks):
 	"""
 	Calcola l'Errore Quadratico Medio (MSE) tra due liste di landmark.
 	Un valore basso significa che sono molto simili.
 	"""
-	# Controlli di sicurezza
+
 	if not live_landmarks or not ref_landmarks:
 		return float('inf') # Errore infinito se una lista è vuota
 	if len(live_landmarks) != len(ref_landmarks):
 		return float('inf') # Errore infinito se non hanno lo stesso n. di punti
 
-	# Converti in array numpy per calcoli vettoriali veloci
 	live_arr = np.array(live_landmarks)
 	ref_arr = np.array(ref_landmarks)
 
+	# Come calcolo l'errore
 	# Calcola la differenza quadratica per ogni coordinata (x, y)
     # (live_arr - ref_arr)**2  -> es. [[(x1-x2)**2, (y1-y2)**2], ...]
     # np.sum(..., axis=1)      -> es. [(x1-x2)**2 + (y1-y2)**2, ...] (distanza euclidea quadrata)
@@ -43,7 +42,6 @@ def calcola_errore_mse(live_landmarks, ref_landmarks):
 	
 	return error
 
-# --- Funzione principale MODIFICATA ---
 def recognize_gestures(dataset_file="compiled_gestures.dat"):
 	cap = cv2.VideoCapture(0)
 	if not cap.isOpened():
@@ -54,7 +52,6 @@ def recognize_gestures(dataset_file="compiled_gestures.dat"):
 	layer_width, layer_height = 300, 300
 	padding = 7
 
-	# --- MODIFICATO: Carica il file .dat compilato ---
 	gestures = load_compiled_gestures(dataset_file)
 	print(f"✅ Dataset compilato caricato: {len(gestures)} gesti trovati.")
 
@@ -99,12 +96,9 @@ def recognize_gestures(dataset_file="compiled_gestures.dat"):
 
 					live_landmarks[label] = landmarks_layer
 					mp.solutions.drawing_utils.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-
-			
-			# --- NUOVA LOGICA DI CONFRONTO (sostituisce il blocco "tolerance") ---
 			
 			miglior_gesto = None
-			miglior_errore = float('inf') # Partiamo da un errore infinito
+			miglior_errore = float('inf')
 
 			# SOGLIA: L'errore massimo per considerare un gesto valido.
 			# Questo è il valore più importante da REGOLARE.
@@ -113,43 +107,38 @@ def recognize_gestures(dataset_file="compiled_gestures.dat"):
 			SOGLIA_ERRORE = 0.005 
 
 			if live_landmarks:
-				# 1. Cicla su OGNI gesto e OGNI campione salvato
 				for gesture_name, gesture_samples in gestures.items():
 					for ref_sample in gesture_samples:
 						
 						errore_totale_campione = 0
-						mani_richieste = 0 # Quante mani richiede questo campione (1 o 2)
-						mani_corrispondenti = 0 # Quante mani live corrispondono
+						mani_richieste = 0
+						mani_corrispondenti = 0
 
-						# Confronta la mano destra
 						if "Right" in ref_sample:
 							mani_richieste += 1
 							if "Right" in live_landmarks:
 								errore_totale_campione += calcola_errore_mse(live_landmarks["Right"], ref_sample["Right"])
 								mani_corrispondenti += 1
 							else:
-								errore_totale_campione = float('inf') # Match impossibile
+								errore_totale_campione = float('inf')
 
-						# Confronta la mano sinistra
 						if "Left" in ref_sample:
 							mani_richieste += 1
 							if "Left" in live_landmarks:
 								errore_totale_campione += calcola_errore_mse(live_landmarks["Left"], ref_sample["Left"])
 								mani_corrispondenti += 1
 							else:
-								errore_totale_campione = float('inf') # Match impossibile
+								errore_totale_campione = float('inf')
 
 						# Se le mani richieste non ci sono, scarta questo campione
 						if mani_corrispondenti < mani_richieste:
 							continue
-						
-						# (Opzionale) Penalità se mostro mani non richieste
+
 						if "Right" not in ref_sample and "Right" in live_landmarks:
 							errore_totale_campione += 0.1 # Penalità (da regolare)
 						if "Left" not in ref_sample and "Left" in live_landmarks:
 							errore_totale_campione += 0.1 # Penalità (da regolare)
 
-						# Normalizza l'errore per il numero di mani
 						errore_normalizzato = errore_totale_campione / mani_richieste if mani_richieste > 0 else 0
 
 						# Controlla se questo è il miglior punteggio trovato FINORA
@@ -157,9 +146,6 @@ def recognize_gestures(dataset_file="compiled_gestures.dat"):
 							miglior_errore = errore_normalizzato
 							miglior_gesto = gesture_name
 			
-			# --- NUOVA LOGICA DI OUTPUT ---
-			
-			# Mostra il risultato SOLO se il miglior errore è sotto la nostra soglia
 			if miglior_gesto is not None and miglior_errore < SOGLIA_ERRORE:
 				# (Puoi aggiungere l'errore al testo per fare debug)
 				# text = f"Gesto: {miglior_gesto} (Err: {miglior_errore:.4f})"

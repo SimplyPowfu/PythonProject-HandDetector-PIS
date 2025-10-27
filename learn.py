@@ -116,7 +116,6 @@ def get_hands_layers_and_landmarks(gesture_name):
 					elif label == "Left":
 						mano_sinistra_img = mano_green
 
-			# Mostra finestre
 			cv2.imshow("Camera", frame_draw)
 			if mano_destra_img is not None:
 				cv2.imshow("Mano Destra", mano_destra_img)
