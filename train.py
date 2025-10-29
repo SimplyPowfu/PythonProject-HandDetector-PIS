@@ -54,8 +54,6 @@ def prepare_data(gestures_data):
 	return np.array(X), np.array(y)
 
 def train_model():
-	print("--- Avvio Addestramento Modello (Random Forest) ---")
-	
 	gestures_data = load_compiled_data()
 	if not gestures_data:
 		return
@@ -86,7 +84,7 @@ def train_model():
 	output_file = "gesture_model.pkl"
 	with open(output_file, "wb") as f:
 		pickle.dump(model, f)
-		
+
 	print(f"\n✅ Modello salvato con successo in: {output_file}")
 
 if __name__ == "__main__":

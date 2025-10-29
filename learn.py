@@ -23,9 +23,6 @@ def add_gesture():
 		print("❌ Nome del segno non valido. Usa solo lettere.")
 		return add_gesture()
 	path = Path(f"DATASET/{gesture_name}")
-	if path.exists():
-		print("❌ Questo segno esiste già! Inseriscine un altro.")
-		return add_gesture()
 	get_hands_layers_and_landmarks(gesture_name)
 
 def get_hands_layers_and_landmarks(gesture_name):
@@ -43,7 +40,7 @@ def get_hands_layers_and_landmarks(gesture_name):
 
 	with mp_hands.Hands(
 		min_detection_confidence=0.6,
-		min_tracking_confidence=0.5
+		min_tracking_confidence=0.6
 	) as hands:
 		while True:
 			ret, frame = cap.read()
@@ -67,10 +64,11 @@ def get_hands_layers_and_landmarks(gesture_name):
 				for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
 					label = handedness.classification[0].label  # "Right" o "Left"
 
+					#converto le coordinate dei landmark in pixel per ritagliare le mani 
 					xs = [int(lm.x * w) for lm in hand_landmarks.landmark]
 					ys = [int(lm.y * h) for lm in hand_landmarks.landmark]
 
-					# Bounding box mano
+					# Bounding riquadro mano per normalizzare poi il 300x300 zoomando se serve
 					x_min = max(min(xs) - padding, 0)
 					x_max = min(max(xs) + padding, w)
 					y_min = max(min(ys) - padding, 0)
@@ -82,7 +80,7 @@ def get_hands_layers_and_landmarks(gesture_name):
 					mano_crop = frame[y_min:y_max, x_min:x_max]
 					if mano_crop.size == 0:
 						continue
-
+	
 					mano_crop_resized = cv2.resize(mano_crop, (layer_width, layer_height))
 					mano_green = np.full((layer_height, layer_width, 3), (0, 255, 0), dtype=np.uint8)
 
