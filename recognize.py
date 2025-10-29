@@ -34,6 +34,7 @@ def recognize_gestures(model_file="gesture_model.pkl"):
 	model = load_model(model_file)
 
 	mp_hands = mp.solutions.hands
+	mp_drawing = mp.solutions.drawing_utils
 	layer_width, layer_height = 300, 300
 	padding = 7
 
@@ -78,7 +79,7 @@ def recognize_gestures(model_file="gesture_model.pkl"):
 						landmarks_layer.append((x_pixel / layer_width, y_pixel / layer_height))
 
 					live_landmarks[label] = landmarks_layer
-					mp.solutions.drawing_utils.draw_landmarks(frame_draw, hand_landmarks, mp.hands.HAND_CONNECTIONS)
+					mp_drawing.draw_landmarks(frame_draw, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
 				
 				#LOGICA DI PREDIZIONE DEL MODELLO Random Forest
